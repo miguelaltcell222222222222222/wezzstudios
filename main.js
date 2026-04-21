@@ -1,216 +1,147 @@
-.login-screen {
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    min-height: 100vh;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-}
+const socket = io();
+let currentUser = null;
+let currentCategory = 'all';
+let searchQuery = '';
 
-.login-box {
-    background-color: var(--surface);
-    padding: 3rem;
-    border-radius: 16px;
-    box-shadow: var(--shadow-lg);
-    width: 100%;
-    max-width: 400px;
-}
+async function initializeUser() {
+    const checkResponse = await fetch('/api/check-user');
+    const checkData = await checkResponse.json();
 
-.login-box h2 {
-    text-align: center;
-    margin-bottom: 2rem;
-    color: var(--text-primary);
-}
-
-.login-box form {
-    display: flex;
-    flex-direction: column;
-    gap: 1rem;
-}
-
-.login-box input {
-    padding: 0.75rem;
-    border: 1px solid var(--border-color);
-    border-radius: 8px;
-    font-size: 1rem;
-}
-
-.login-box button {
-    width: 100%;
-    margin-top: 0.5rem;
-}
-
-.back-link {
-    display: block;
-    text-align: center;
-    margin-top: 1rem;
-    color: var(--primary-color);
-    text-decoration: none;
-}
-
-.admin-tabs {
-    display: flex;
-    gap: 1rem;
-    margin-bottom: 2rem;
-    border-bottom: 2px solid var(--border-color);
-}
-
-.tab-btn {
-    padding: 1rem 2rem;
-    border: none;
-    background: none;
-    font-size: 1rem;
-    font-weight: 500;
-    cursor: pointer;
-    color: var(--text-secondary);
-    border-bottom: 3px solid transparent;
-    transition: all 0.2s;
-}
-
-.tab-btn:hover {
-    color: var(--primary-color);
-}
-
-.tab-btn.active {
-    color: var(--primary-color);
-    border-bottom-color: var(--primary-color);
-}
-
-.tab-content {
-    display: none;
-}
-
-.tab-content.active {
-    display: block;
-}
-
-.section-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 2rem;
-}
-
-.section-header h2 {
-    font-size: 1.8rem;
-}
-
-.admin-products-list {
-    display: grid;
-    gap: 1rem;
-}
-
-.admin-product-item {
-    background-color: var(--surface);
-    padding: 1.5rem;
-    border-radius: 12px;
-    box-shadow: var(--shadow);
-    display: grid;
-    grid-template-columns: 80px 1fr auto;
-    gap: 1.5rem;
-    align-items: center;
-}
-
-.admin-product-image {
-    width: 80px;
-    height: 80px;
-    object-fit: cover;
-    border-radius: 8px;
-}
-
-.admin-product-info h3 {
-    margin-bottom: 0.5rem;
-}
-
-.admin-product-info p {
-    color: var(--text-secondary);
-    font-size: 0.9rem;
-}
-
-.admin-product-meta {
-    display: flex;
-    gap: 1rem;
-    margin-top: 0.5rem;
-}
-
-.admin-product-meta span {
-    font-size: 0.85rem;
-    padding: 0.25rem 0.75rem;
-    border-radius: 12px;
-    background-color: var(--background);
-}
-
-.admin-product-actions {
-    display: flex;
-    gap: 0.5rem;
-}
-
-.btn-icon {
-    padding: 0.5rem;
-    border: none;
-    background: none;
-    cursor: pointer;
-    font-size: 1.2rem;
-    border-radius: 8px;
-    transition: background-color 0.2s;
-}
-
-.btn-icon:hover {
-    background-color: var(--background);
-}
-
-.chats-list {
-    display: grid;
-    gap: 1rem;
-}
-
-.chat-item {
-    background-color: var(--surface);
-    padding: 1.5rem;
-    border-radius: 12px;
-    box-shadow: var(--shadow);
-    cursor: pointer;
-    transition: all 0.2s;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-}
-
-.chat-item:hover {
-    transform: translateY(-2px);
-    box-shadow: var(--shadow-lg);
-}
-
-.chat-item.pinned {
-    border: 2px solid var(--warning-color);
-}
-
-.chat-item-info h4 {
-    margin-bottom: 0.5rem;
-}
-
-.chat-item-info p {
-    color: var(--text-secondary);
-    font-size: 0.9rem;
-}
-
-.chat-item-badge {
-    padding: 0.5rem 1rem;
-    border-radius: 20px;
-    font-size: 0.85rem;
-    font-weight: 600;
-}
-
-.chat-item-badge.unread {
-    background-color: var(--danger-color);
-    color: white;
-}
-
-@media (max-width: 768px) {
-    .admin-product-item {
-        grid-template-columns: 1fr;
+    if (checkData.userId) {
+        currentUser = checkData.userId;
+    } else {
+        const assignResponse = await fetch('/api/assign-user', { method: 'POST' });
+        const assignData = await assignResponse.json();
+        currentUser = assignData.userId;
     }
 
-    .admin-product-actions {
-        justify-content: flex-start;
+    document.getElementById('usernameDisplay').textContent = currentUser;
+}
+
+async function loadProducts() {
+    const container = document.getElementById('productsContainer');
+    container.innerHTML = '<div class="loading">Laddar produkter...</div>';
+
+    const params = new URLSearchParams();
+    if (currentCategory !== 'all') {
+        params.append('category', currentCategory);
+    }
+    if (searchQuery) {
+        params.append('search', searchQuery);
+    }
+
+    try {
+        const response = await fetch(`/api/products?${params}`);
+        const products = await response.json();
+
+        if (products.length === 0) {
+            container.innerHTML = '<div class="loading">Inga produkter hittades</div>';
+            return;
+        }
+
+        container.innerHTML = products.map(product => `
+            <div class="product-card" onclick="showProductDetails('${product.id}')">
+                <img src="${product.image}" alt="${product.name}" class="product-image" onerror="this.src='https://via.placeholder.com/300x200?text=Bild+saknas'">
+                <div class="product-info">
+                    <h3 class="product-name">${product.name}</h3>
+                    <p class="product-description">${product.description}</p>
+                    <div class="product-footer">
+                        <span class="product-price">${product.price} SEK</span>
+                        <span class="product-stock ${getStockClass(product.stock)}">${getStockText(product.stock)}</span>
+                    </div>
+                </div>
+            </div>
+        `).join('');
+    } catch (error) {
+        console.error('Error loading products:', error);
+        container.innerHTML = '<div class="loading">Fel vid laddning av produkter</div>';
     }
 }
+
+function getStockClass(stock) {
+    if (stock === 0) return 'out-of-stock';
+    if (stock < 5) return 'low-stock';
+    return 'in-stock';
+}
+
+function getStockText(stock) {
+    if (stock === 0) return 'Slut i lager';
+    if (stock < 5) return `Få kvar (${stock})`;
+    return `I lager (${stock})`;
+}
+
+async function showProductDetails(productId) {
+    try {
+        const response = await fetch(`/api/products/${productId}`);
+        const product = await response.json();
+
+        const modal = document.getElementById('productModal');
+        const details = document.getElementById('productDetails');
+
+        details.innerHTML = `
+            <img src="${product.image}" alt="${product.name}" class="product-detail-image" onerror="this.src='https://via.placeholder.com/600x300?text=Bild+saknas'">
+            <div class="product-detail-info">
+                <h2>${product.name}</h2>
+                <p>${product.description}</p>
+                <div class="product-footer">
+                    <span class="product-price">${product.price} SEK</span>
+                    <span class="product-stock ${getStockClass(product.stock)}">${getStockText(product.stock)}</span>
+                </div>
+                <button onclick="startChat('${product.id}', '${product.name}')" class="btn-primary" style="width: 100%; margin-top: 1.5rem;">
+                    💬 Kontakta Admin för Köp
+                </button>
+            </div>
+        `;
+
+        modal.style.display = 'block';
+    } catch (error) {
+        console.error('Error loading product details:', error);
+    }
+}
+
+function startChat(productId, productName) {
+    window.location.href = `/chat.html?product=${productId}&name=${encodeURIComponent(productName)}`;
+}
+
+document.addEventListener('DOMContentLoaded', async () => {
+    await initializeUser();
+    await loadProducts();
+
+    document.querySelectorAll('.category-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            document.querySelectorAll('.category-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            currentCategory = btn.dataset.category;
+            loadProducts();
+        });
+    });
+
+    document.getElementById('searchBtn').addEventListener('click', () => {
+        searchQuery = document.getElementById('searchInput').value;
+        loadProducts();
+    });
+
+    document.getElementById('searchInput').addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') {
+            searchQuery = e.target.value;
+            loadProducts();
+        }
+    });
+
+    document.getElementById('chatBtn').addEventListener('click', () => {
+        window.location.href = '/chat.html';
+    });
+
+    const modal = document.getElementById('productModal');
+    const closeBtn = modal.querySelector('.close');
+
+    closeBtn.addEventListener('click', () => {
+        modal.style.display = 'none';
+    });
+
+    window.addEventListener('click', (e) => {
+        if (e.target === modal) {
+            modal.style.display = 'none';
+        }
+    });
+});
